@@ -1,0 +1,11 @@
+{
+  "name": "@billpulse/shared",
+  "version": "1.0.0",
+  "description": "Shared TypeScript interfaces, constants, and utilities for BillPulse Pro",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  }
+}

@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing and coverage
+coverage/
+*.lcov
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.turbo/
+src-tauri/target/
+
+# Local databases and runtime assets
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+/data/
+/assets/uploads/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+license.guard
+
+# System and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

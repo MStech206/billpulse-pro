@@ -1,0 +1,14 @@
+{
+  "name": "@billpulse/api",
+  "version": "1.0.0",
+  "description": "Fastify backend API server for BillPulse Pro cloud sync and micro-billing settlement",
+  "main": "./dist/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@billpulse/shared": "*"
+  }
+}
