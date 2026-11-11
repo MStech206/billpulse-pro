@@ -1,22 +1,34 @@
 /**
- * BillPulse Pro — Cloud API Gateway & Delta Sync Service
+ * BillPulse Pro — Cloud API Gateway, Sync Engine & Admin Web Service
  *
- * Provides endpoints for:
- * 1. POST /api/v1/sync/batch     - Ingests offline-queued invoices, computes platform fees (Rs. 0.50/Rs. 1.00)
- * 2. POST /api/v1/license/verify - Evaluates month rollover and checks pending dues
- * 3. POST /api/v1/webhooks/razorpay - Verifies HMAC-SHA256 webhook signatures and settles dues
- * 4. GET  /health               - Cluster liveness probe
+ * Implements:
+ * 1. POST /api/v1/license/activate    - Hardware-bound desktop license activation
+ * 2. POST /api/v1/sync/batch          - Offline bill delta ingestion & fee accrual (Rs. 20 base + orders)
+ * 3. POST /api/v1/webhooks/razorpay   - Razorpay HMAC verification & automatic unblock
+ * 4. GET  /api/v1/admin/dashboard     - Global metrics (active, warning, blocked, revenue)
+ * 5. GET  /api/v1/admin/merchants     - Merchant list with filter & search
+ * 6. POST /api/v1/admin/merchants/:id/action - Grant / Revoke / Suspend
+ * 7. GET  /api/v1/admin/orders/:id    - Audit order log per merchant
+ * 8. POST /api/v1/admin/keys/generate - Generate new Serial Numbers & Activation Keys
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
 import type {
   SyncBatchPayload,
   SyncBatchResponse,
   BillingPlan,
+  AdminDashboardMetrics,
+  MerchantAdminRecord,
+  BlockLogEntry,
+  LicenseKeyRecord,
+} from '../../shared/src/types.js';
+import {
+  MONTHLY_BASE_FEE_PAISE,
+  calculateMonthEndDuesPaise,
 } from '../../shared/src/types.js';
 
 /**
- * Verifies Razorpay Webhook HMAC-SHA256 signature
+ * Timing-safe HMAC-SHA256 signature verification for Razorpay Webhooks
  */
 export function verifyRazorpaySignature(
   rawBody: string,
@@ -43,48 +55,26 @@ export function verifyRazorpaySignature(
 }
 
 /**
- * Calculates platform fee in paise for a batch of invoices
- */
-export function calculateBatchFees(
-  invoices: Array<{ billing_tier: BillingPlan; platform_fee_paise: number }>
-): number {
-  return invoices.reduce((acc, inv) => {
-    if (inv.billing_tier === 'PER_ORDER_050') return acc + 50;
-    if (inv.billing_tier === 'PER_INVOICE_100') return acc + 100;
-    return acc; // MONTHLY_UNLIMITED has 0 per-invoice fee
-  }, 0);
-}
-
-/**
- * Core Batch Sync Ingestion Processor
+ * Ingests a batch of offline-queued invoices from desktop
  */
 export function processBatchSync(
   payload: SyncBatchPayload,
-  currentPendingDuesPaise: number,
+  currentOrdersCount: number,
   merchantBillingPlan: BillingPlan
 ): SyncBatchResponse {
   const syncedIds: string[] = [];
   const failedIds: string[] = [];
-
-  let batchFeeAccrualPaise = 0;
 
   for (const inv of payload.invoices) {
     if (!inv.invoice_uuid || !inv.invoice_number) {
       failedIds.push(inv.invoice_uuid || 'unknown');
       continue;
     }
-
-    // In a real database write, this executes inside a PostgreSQL transaction
     syncedIds.push(inv.invoice_uuid);
-
-    if (merchantBillingPlan === 'PER_ORDER_050') {
-      batchFeeAccrualPaise += 50;
-    } else if (merchantBillingPlan === 'PER_INVOICE_100') {
-      batchFeeAccrualPaise += 100;
-    }
   }
 
-  const newTotalDuesPaise = currentPendingDuesPaise + batchFeeAccrualPaise;
+  const newTotalOrders = currentOrdersCount + syncedIds.length;
+  const newTotalDuesPaise = calculateMonthEndDuesPaise(newTotalOrders, merchantBillingPlan);
   const currentMonth = new Date().toISOString().slice(0, 7);
 
   return {
@@ -93,7 +83,66 @@ export function processBatchSync(
     pending_dues_paise: newTotalDuesPaise,
     pending_dues_inr: newTotalDuesPaise / 100,
     active_year_month: currentMonth,
-    license_status: newTotalDuesPaise > 0 ? 'PAYMENT_REQUIRED' : 'VALID',
+    license_status: newTotalDuesPaise > 0 ? 'WARNING' : 'ACTIVE',
     signed_license_jwt: `jwt-signed-${payload.tenant_id}-${Date.now()}`,
+  };
+}
+
+/**
+ * Generates formatted Serial Number & Activation Key
+ * Format: BP-2026-XXXX-XXXX and ACT-XXXX-XXXX-XXXX
+ */
+export function generateLicenseCredentials(rateTier: BillingPlan): LicenseKeyRecord {
+  const randBlock = () => Math.floor(1000 + Math.random() * 9000).toString();
+  const serialNumber = `BP-2026-${randBlock()}-${randBlock()}`;
+  const activationKey = `ACT-${randBlock()}-${randBlock()}-${randBlock()}`;
+
+  return {
+    license_id: randomUUID(),
+    serial_number: serialNumber,
+    activation_key: activationKey,
+    rate_tier: rateTier,
+    max_terminals: 1,
+    status: 'UNUSED',
+    created_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Computes Admin Dashboard Overview Metrics
+ */
+export function calculateAdminMetrics(merchants: MerchantAdminRecord[]): AdminDashboardMetrics {
+  let totalOrders = 0;
+  let totalExpectedPaise = 0;
+  let totalCollectedPaise = 0;
+  let activeCount = 0;
+  let warningCount = 0;
+  let blockedCount = 0;
+  let unpaidCount = 0;
+
+  for (const m of merchants) {
+    totalOrders += m.total_orders_month;
+    totalExpectedPaise += m.total_due_paise;
+
+    if (m.payment_status === 'PAID') {
+      totalCollectedPaise += m.total_due_paise;
+    } else {
+      unpaidCount++;
+    }
+
+    if (m.license_status === 'ACTIVE') activeCount++;
+    if (m.license_status === 'WARNING') warningCount++;
+    if (m.license_status === 'BLOCKED' || m.license_status === 'SUSPENDED') blockedCount++;
+  }
+
+  return {
+    total_merchants: merchants.length,
+    active_merchants: activeCount,
+    warning_merchants: warningCount,
+    blocked_merchants: blockedCount,
+    total_orders_this_month: totalOrders,
+    total_revenue_expected_paise: totalExpectedPaise,
+    total_revenue_collected_paise: totalCollectedPaise,
+    unpaid_merchants_count: unpaidCount,
   };
 }

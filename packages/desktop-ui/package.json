@@ -1,0 +1,14 @@
+{
+  "name": "@billpulse/desktop-ui",
+  "version": "1.0.0",
+  "description": "5-Screen Desktop Billing Application for BillPulse Pro (Offline-First)",
+  "main": "./src/App.tsx",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@billpulse/shared": "*",
+    "@billpulse/desktop-guard": "*"
+  }
+}

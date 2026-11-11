@@ -186,50 +186,58 @@ flowchart TD
 
 ## 3. The Hardcoded Desktop Guard
 
-### 3.1 The 7-Day Post-Month Grace Lock
+### 3.1 The 7th-to-11th Post-Month Grace & Block Policy
 
-To balance offline freedom with subscription enforcement, the desktop binary enforces a strict lifecycle rule:
+To enforce subscription payments without disrupting retail counters during month-end closing, the desktop application embeds a strict state machine:
 
-* **During the current month (`YYYY-MM`):** The merchant can bill 100% offline. Every invoice is prefixed with the active month (e.g., `INV-202611-0001`) and queued locally.
-* **When the month ends:** In India, merchants and their accountants need time to close the books. The desktop app grants a **7-calendar-day offline grace window**. During Days 1 through 7 of the new month, a non-intrusive banner appears:
-  `"Post-month grace period active: 3 days remaining. Please connect to internet to sync."`
-* **On Day 8 and beyond:** If the computer has remained offline for more than 7 days after the month ended, a full-screen hard lock engages. No new bills can be generated until the computer is connected to the internet.
-* **On Reconnection:** The app automatically pushes all queued offline invoices first. It then checks outstanding dues. If dues are ₹0.00, it unlocks immediately. If dues are pending, it displays a Razorpay payment modal and unlocks the moment the payment webhook confirms.
+* **In-Month Operation (`1st to 30th/31st`):** Billing functions 100% offline. Every invoice is tagged with the active month (e.g., `TEA-202611-0001`) and accrues the platform fee locally.
+* **Days 1 to 7 Post-Month (Soft Reminder Phase):** The merchant can continue billing normally offline. A non-intrusive green banner displays:  
+  `"Past month dues: ₹226.00. Grace period active (X days remaining)."`
+* **Days 7 to 11 Post-Month (Urgent Warning Phase):** Billing is still permitted, but on every app launch, an urgent orange warning alert displays:  
+  `"⚠️ Your application may be blocked after the 11th! Settle dues of ₹226.00 via Razorpay UPI now."`
+* **Day 11+ Post-Month (Hard Block Phase):** If payment has not been received by the 11th, a full-screen red lock engages. New invoice creation is disabled until the merchant scans the Razorpay UPI QR code.
+* **On Payment Settlement:** The Razorpay webhook resets dues to ₹0.00 and the app unlocks instantly for the new month cycle.
 
 ```mermaid
 stateDiagram-v2
     [*] --> InMonthActive: Billing inside active month
 
-    InMonthActive --> PostMonthGrace: Month ends (Calendar rolls over)
-    InMonthActive --> InMonthActive: Bills created offline (queued)
+    InMonthActive --> InMonthActive: Orders created offline (fee accrued)
+    InMonthActive --> PostMonthDays1to7: Month ends (Calendar rolls over)
 
-    state PostMonthGrace {
-        [*] --> Days1to7: Days 1 to 7 post-month
-        Days1to7 --> BillingPermitted: Warning banner shown
-        BillingPermitted --> Days1to7: Keep billing offline
+    state PostMonthDays1to7 {
+        [*] --> Days1to7: Days 1 to 7
+        Days1to7 --> NormalBilling: Green banner reminder
+        NormalBilling --> Days1to7: Keep billing offline
     }
 
-    PostMonthGrace --> HardLocked: Offline > 7 days past month-end
-    HardLocked --> InternetConnected: User connects to internet
-    PostMonthGrace --> InternetConnected: User connects to internet
+    PostMonthDays1to7 --> WarningDays7to11: Day 7 reached (Unpaid)
 
-    state InternetConnected {
-        [*] --> SyncQueuedBills: POST /api/v1/sync/batch
-        SyncQueuedBills --> CheckPendingDues
-        CheckPendingDues --> PromptPaymentModal: Dues > ₹0.00
-        PromptPaymentModal --> PaymentConfirmed: Razorpay settlement
-        PaymentConfirmed --> IssueFreshToken: Reset dues to 0
-        CheckPendingDues --> IssueFreshToken: Dues == ₹0.00
+    state WarningDays7to11 {
+        [*] --> Days7to11: Days 7 to 11
+        Days7to11 --> WarningBilling: Orange banner: 'Blocked after 11th'
+        WarningBilling --> Days7to11: Keep billing with warning
     }
 
-    IssueFreshToken --> InMonthActive: Roll over active_year_month (Unlocked)
+    WarningDays7to11 --> HardLocked: Day 11 exceeded (Unpaid)
+
+    state HardLocked {
+        [*] --> LockedScreen: Red lock with Razorpay UPI QR
+        LockedScreen --> LockedScreen: Creation blocked
+    }
+
+    PostMonthDays1to7 --> PaymentReceived: Razorpay UPI QR paid
+    WarningDays7to11 --> PaymentReceived: Razorpay UPI QR paid
+    HardLocked --> PaymentReceived: Razorpay UPI QR paid
+
+    PaymentReceived --> InMonthActive: Dues = 0 -> New month unlocked
 ```
 
 ---
 
 ### 3.2 Monotonic Clock Rollback Protection
 
-Because the desktop runs on a user-controlled Windows machine, a user might try to roll back their Windows system clock (e.g., setting the date back from December 10 to November 25) to trick the 7-day grace timer.
+Because the desktop runs on a user-controlled Windows machine, a user might try to roll back their Windows system clock (e.g., setting the date back from December 12 to December 5) to trick the 11-day block timer.
 
 To prevent this:
 1. Every time the app writes an invoice or runs a heartbeat, it checks `now_unix` against `max_seen_timestamp` stored in the encrypted SQLite database.
@@ -260,54 +268,79 @@ export function verifyDesktopGuard(
     };
   }
 
-  const date = new Date(nowUnix * 1000);
-  const currentYearMonth = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  // 2. Admin Revocation Check
+  if (profile.license_status === 'REVOKED' || profile.license_status === 'SUSPENDED') {
+    return {
+      allowed: false,
+      code: 'BLOCKED_POST_MONTH_EXCEEDED',
+      message: 'License has been suspended or revoked by the platform administrator.'
+    };
+  }
+
+  const d = new Date(nowUnix * 1000);
+  const currentYearMonth = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   const isMonthExceeded = currentYearMonth > profile.active_year_month;
 
-  // 2. Compute days elapsed since the active billing month closed
+  // 3. Compute days elapsed since the active billing month closed
   const activeMonthEndUnix = getEndOfMonthUnix(profile.active_year_month);
   const referenceTimestamp = Math.max(profile.last_synced_at, activeMonthEndUnix);
   const offlineDaysAfterMonthEnd = isMonthExceeded
     ? Math.floor(Math.max(0, nowUnix - referenceTimestamp) / 86400)
     : 0;
 
-  // 3. Offline Mode: Allow up to 7 days grace, hard block on Day 8+
-  if (!isInternetConnected) {
-    if (isMonthExceeded && offlineDaysAfterMonthEnd > 7) {
-      return {
-        allowed: false,
-        code: 'BLOCKED_OFFLINE_OVER_7_DAYS',
-        offlineDays: offlineDaysAfterMonthEnd,
-        pendingDuesINR: profile.pending_dues_paise / 100,
-        message: 'Offline grace period exceeded (>7 days). Connect internet to continue billing.'
-      };
-    }
+  const duesINR = profile.pending_dues_paise / 100;
+  const daysUntilBlock = Math.max(0, 11 - offlineDaysAfterMonthEnd);
 
-    const remainingGraceDays = isMonthExceeded ? Math.max(0, 7 - offlineDaysAfterMonthEnd) : undefined;
-
+  // In-month operation
+  if (!isMonthExceeded) {
     return {
       allowed: true,
-      code: 'OFFLINE_ALLOWED',
-      remainingGraceDays,
-      offlineDays: isMonthExceeded ? offlineDaysAfterMonthEnd : 0
+      code: isInternetConnected ? 'UNLOCKED_AND_VERIFIED' : 'OFFLINE_ALLOWED',
+      nextPrefix: `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`
     };
   }
 
-  // 4. Online Mode: If month has rolled over, ensure past month dues are settled
-  if (isMonthExceeded && profile.pending_dues_paise > 0) {
+  // If already settled
+  if (profile.pending_dues_paise === 0) {
+    return {
+      allowed: true,
+      code: 'UNLOCKED_AND_VERIFIED',
+      nextPrefix: `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`
+    };
+  }
+
+  // Day 11+ -> HARD BLOCK
+  if (offlineDaysAfterMonthEnd > 11) {
     return {
       allowed: false,
-      code: 'PAYMENT_DUE_ON_RECONNECT',
-      pendingDuesINR: profile.pending_dues_paise / 100,
-      message: `Pending balance of ₹${(profile.pending_dues_paise / 100).toFixed(2)} due for previous month.`
+      code: 'BLOCKED_POST_MONTH_EXCEEDED',
+      offlineDays: offlineDaysAfterMonthEnd,
+      daysUntilBlock: 0,
+      pendingDuesINR: duesINR,
+      message: `Your application is blocked. Past month dues of Rs. ${duesINR.toFixed(2)} must be paid via Razorpay to resume billing.`
     };
   }
 
-  // 5. All Clear: Advance prefix and unlock
+  // Day 7 to Day 11 -> URGENT ORANGE WARNING
+  if (offlineDaysAfterMonthEnd > 7) {
+    return {
+      allowed: true,
+      code: 'POST_MONTH_WARNING',
+      offlineDays: offlineDaysAfterMonthEnd,
+      daysUntilBlock,
+      pendingDuesINR: duesINR,
+      message: `Your application may be blocked after the 11th! ${daysUntilBlock} day(s) remaining. Pay Rs. ${duesINR.toFixed(2)} via UPI.`
+    };
+  }
+
+  // Day 1 to Day 7 -> SOFT GREEN REMINDER
   return {
     allowed: true,
-    code: 'UNLOCKED_AND_VERIFIED',
-    nextPrefix: `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`
+    code: 'POST_MONTH_REMINDER',
+    offlineDays: offlineDaysAfterMonthEnd,
+    daysUntilBlock,
+    pendingDuesINR: duesINR,
+    message: `Past month dues: Rs. ${duesINR.toFixed(2)}. Grace period active (${daysUntilBlock} days left).`
   };
 }
 ```
@@ -358,15 +391,20 @@ The checkout screen uses a split-screen design:
 
 ---
 
-### 4.3 Micro-Billing Engine (₹0.50 / ₹1.00 / Monthly Plan)
+### 4.3 Month-End Postpaid Settlement Engine (Zero Prepaid Wallet)
 
-BillPulse Pro supports three pricing tiers:
+BillPulse Pro eliminates prepaid wallets completely. Merchants pay **100% postpaid at month-end** via dynamic Razorpay UPI QR code:
 
-| Tier Code | Fee | Target Document | Settlement Method |
+$$\text{Total Month-End Dues} = \underbrace{₹20.00}_{\text{Fixed Monthly Base Platform Fee}} + \underbrace{\left(\text{Total Orders} \times ₹0.50 \text{ or } ₹1.00\right)}_{\text{Per-Order Accrued Fee}}$$
+
+| Billing Tier | Rate | Target Business Type | Month-End Settlement Example |
 | :--- | :--- | :--- | :--- |
-| `PER_ORDER_050` | **₹0.50** | Compact thermal receipt / cash memo | Deducted from prepaid wallet or accrued in local ledger and settled monthly via UPI QR. |
-| `PER_INVOICE_100`| **₹1.00** | A4/A5 full GST invoice with logo & stamp | Deducted from prepaid wallet or accrued and settled via Razorpay payment link. |
-| `MONTHLY_UNLIMITED`| **₹299/mo** | Unlimited thermal & A4 invoices | Billed monthly via recurring Razorpay payment link or UPI autopay. |
+| **`PER_ORDER_050`** | **₹0.50 / order** | Tea Shops, Kiranas, Bakeries, Quick Food | 400 bills: $₹20\text{ base} + (400 \times ₹0.50) =$ **₹220.00** via Razorpay UPI QR |
+| **`PER_INVOICE_100`** | **₹1.00 / invoice** | Wholesalers, Distributors, Hardware | 150 invoices: $₹20\text{ base} + (150 \times ₹1.00) =$ **₹170.00** via Razorpay UPI QR |
+
+* **Zero Upfront Cost:** Merchants download, configure their business type, and start billing immediately.
+* **Accrued Locally Offline:** Every bill increments `total_orders_month` and accrues the fee in the encrypted SQLite database.
+* **Month-End UPI Settlement:** On month rollover, the settlement popup presents the exact breakdown and dynamic Razorpay UPI QR code. Payment unblocks the new month within 2 seconds via webhook.
 
 ---
 
@@ -401,10 +439,64 @@ When internet connectivity returns:
 
 ---
 
-### 4.5 Brand Customization Studio (F7) & Catalog (F6)
+### 4.5 The 5 Desktop Screens (Merchant POS Engine)
 
-* **Zero-Code Branding (`F7`):** Merchants upload their shop logo and authorized signature stamp. The browser or webview immediately rescales the image to $300 \times 300\text{ px}$ in WebP format ($< 150\text{ KB}$), saving it to SQLite for offline printing and queuing it for upload to Cloudflare R2.
-* **Product Catalog (`F6`):** Displays frequently billed items as visual cards or pills with predefined HSN codes, GST percentages, and selling rates. Cashiers can tap or click items to instantly add them to the active invoice.
+Instead of hundreds of nested legacy menus, the desktop counter application is streamlined into exactly 5 visual screens:
+
+1. **Screen 1 — License Activation (`Screen1_ActivateLicense.tsx`):**
+   * Modeled after standard terminal licensing dialogs.
+   * Merchant enters Serial Number (`BP-2026-XXXX-XXXX`), Activation Key (`ACT-XXXX-XXXX-XXXX`), and Mobile Number.
+   * Binds automatically to hardware fingerprint (`device_id` hash of Motherboard UUID + CPU ID). Cannot be pirated onto unauthorized PCs.
+2. **Screen 2 — Shop Setup & Business Presets (`Screen2_ShopConfig.tsx`):**
+   * Merchant selects their **Business Type** from a visual grid:
+     * **Tea Shop / Chai Point (`TEA`):** Auto-loads tea, coffee, samosas, biscuits; default 5% GST; ₹0.50/order rate.
+     * **Kirana Store (`KRN`):** Auto-loads rice, oil, atta, sugar, milk, eggs; default 5% GST; ₹0.50/order rate.
+     * **Wholesaler / Distributor (`WHL`):** Auto-loads bulk sacks, oil tins; default 18% GST; ₹1.00/invoice rate.
+     * **General Store (`GEN`), Medical (`MED`), Restaurant (`RST`), Bakery (`BKR`), Stationery (`STN`), Hardware (`HWD`), Custom.**
+   * Shop name, address, GSTIN (optional), merchant UPI ID (for customer dynamic QR payment), logo and signature stamp upload with automatic client-side compression to $< 150\text{ KB}$ WebP.
+3. **Screen 3 — Product Catalog Manager (`Screen3_CatalogManager.tsx` / `F6`):**
+   * Fast visual cards and pills showing item name, selling rate (₹), GST slab (0%, 5%, 12%, 18%, 28%), and optional HSN code.
+   * Add, edit, or remove items in 1 click.
+4. **Screen 4 — Express POS Billing (`Screen4_ExpressPOS.tsx` / `F4`):**
+   * Split-screen counter design:
+     * **Left:** 1-tap quick item pills, keyboard-first navigation (`Tab`/`Enter`), customer mobile (optional), payment mode selector (`Cash`, `UPI`, `Card`, `Credit`), platform fee accrual tracker.
+     * **Right:** Live 1:1 WYSIWYG receipt preview with customer dynamic payment UPI QR, shop branding, and instant ESC/POS thermal printing (`F10` in $< 50\text{ ms}$).
+5. **Screen 5 — Month-End Settlement & Lock Modal (`Screen5_SettlementModal.tsx`):**
+   * Displays on month rollover with exact breakdown:
+     $$\text{Total Dues} = ₹20.00\text{ (Base Platform Fee)} + (\text{Orders} \times ₹0.50\text{ or }₹1.00)$$
+   * Dynamic Razorpay UPI QR code generated on the counter screen.
+   * **Enforces 7th-to-11th Grace & Block Policy:**
+     * Days 1–7: Soft green reminder banner (billing allowed).
+     * Days 7–11: Urgent orange warning ("Your application may be blocked after the 11th" — billing allowed).
+     * Day 11+: Red hard lock screen (billing blocked until Razorpay webhook confirms payment).
+
+---
+
+### 4.6 The 6 Admin Web Panel Screens (Platform Owner Control Center)
+
+Built with React 19 and Tailwind CSS for the platform administrator to monitor, bill, and manage all desktop counter installations:
+
+1. **Admin Screen 1 — Global Dashboard (`AdminScreen1_Dashboard.tsx`):**
+   * Key KPI metrics: Total Merchants, Active Terminals, Warning Shops (Days 7–11), Blocked Shops (Day 11+), Total Orders This Month, Total Revenue Expected vs. Collected.
+   * Live recent transaction feed across all shops.
+2. **Admin Screen 2 — Merchant Registry & Filter (`AdminScreen2_MerchantList.tsx`):**
+   * Search by shop name, mobile number, or serial number.
+   * Filter pills: `ALL` | `UNPAID` | `WARNING` | `BLOCKED` | `ACTIVE`.
+   * Real-time counter metrics: orders count, base fee (₹20), orders fee, total due, and payment status.
+   * 1-click admin actions: `[View Logs]`, `[Unlock / Grant]`, `[Suspend Terminal]`, `[Revoke License]`.
+3. **Admin Screen 3 — Merchant Detail & Order Logs (`AdminScreen3_MerchantOrderLogs.tsx`):**
+   * Detailed drill-down for any shop.
+   * Live audit log of every bill generated: Date & time, invoice number, items summary, payment mode, subtotal, GST, grand total, and accrued platform fee (₹0.50/₹1.00).
+   * Direct button to send payment reminders via WhatsApp.
+4. **Admin Screen 4 — Revenue & Settlement Reports (`AdminScreen4_RevenueReports.tsx`):**
+   * Aggregated financial ledger: Base subscription revenue vs. per-order transaction fees.
+   * Cryptographically verified Razorpay webhook transaction log (`payment.captured`).
+   * 1-click CSV export for accounting.
+5. **Admin Screen 5 — 7th Warning & 11th Block Audit Logs (`AdminScreen5_NotificationBlockLogs.tsx`):**
+   * Historical event log tracking automated Day 7 warning notices, Day 11 terminal lockouts, and Razorpay payment unblocks.
+6. **Admin Screen 6 — License Key & Serial Generator (`AdminScreen6_LicenseGenerator.tsx`):**
+   * 1-click credential issuer: Select plan (`₹0.50` thermal vs. `₹1.00` full GST tax invoice), enter merchant name, and generate unique Serial (`BP-2026-XXXX-XXXX`) and Activation Key (`ACT-XXXX-XXXX-XXXX`).
+   * Quick-copy to clipboard or share via WhatsApp to onboard a new shop in 30 seconds.
 
 ---
 
@@ -732,11 +824,11 @@ A practical 7-week delivery plan for a two-engineer team (1 Full-Stack + 1 Deskt
 
 ## Appendix C: Domain Glossary
 
-* **Month Prefix (`YYYYMM`):** The mandatory 6-digit year-month string automatically embedded in every invoice (e.g., `202611` for November 2026).
-* **7-Day Post-Month Grace:** The hardcoded policy allowing a desktop terminal to bill offline for up to 7 calendar days after a month closes before requiring an internet sync.
-* **Offline Sync Queue:** Local SQLite table buffer containing invoices where `sync_status = 'offline_queued'`, which drains when internet reconnects.
-* **Monotonic High-Water Mark:** The highest verified Unix timestamp stored on disk (`max_seen_timestamp`), used to block OS clock rollbacks.
-* **Micro-Billing Balance:** The accrued fee balance (in paise) metering ₹0.50 per order bill or ₹1.00 per full tax invoice.
+* **Month Prefix (`YYYYMM`):** The mandatory 6-digit year-month string automatically embedded in every invoice (e.g., `TEA-202611-0042` or `KRN-202611-0105`).
+* **7th-to-11th Post-Month Policy:** The hardcoded policy providing a soft green reminder during Days 1–7, an urgent orange warning during Days 7–11 ("Your application may be blocked after 11th"), and a red hard block on Day 11+ until Razorpay payment is confirmed.
+* **Month-End Postpaid Settlement:** Total dues calculated as Fixed ₹20 Base Fee + (Orders × ₹0.50 or ₹1.00), settled via dynamic Razorpay UPI QR code. Zero prepaid wallet required.
+* **Monotonic High-Water Mark:** The highest verified Unix timestamp stored on disk (`max_seen_timestamp`), used to block OS clock rollbacks (>300s).
+* **Hardware Fingerprint Binding:** Cryptographic hash of Motherboard UUID + CPU ID (`device_id`) locking the license to a single physical PC.
 
 ---
 
@@ -748,7 +840,7 @@ A practical 7-week delivery plan for a two-engineer team (1 Full-Stack + 1 Deskt
 
 ### 1. Run the Hardcoded Guard Test Suite
 
-The test suite validates all 7 offline guard scenarios, the monotonic clock rollback check, and the numbering engine with zero external dependencies:
+The test suite validates the 7th-to-11th post-month grace and block rules, monotonic clock rollback protection, and multi-business numbering with zero external dependencies:
 
 ```bash
 npm test
@@ -762,15 +854,34 @@ billpulse-pro/
 ├── LICENSE                        # MIT License
 ├── package.json                   # Monorepo workspaces & test runner
 ├── packages/
-│   ├── shared/                    # Shared TypeScript interfaces & types
+│   ├── shared/                    # Shared TypeScript models, enums & business presets
 │   │   └── src/types.ts
-│   ├── desktop-guard/             # Anti-tamper & 7-day post-month grace engine
+│   ├── desktop-guard/             # Anti-tamper & 7th-to-11th post-month grace engine
 │   │   ├── src/guard.ts
-│   │   └── tests/guard.test.mjs   # Automated test suite (10/10 passing)
+│   │   └── tests/guard.test.mjs   # Automated test suite (9/9 passing)
+│   ├── desktop-ui/                # 5-Screen Desktop Counter Application (Tauri 2.0 / React)
+│   │   └── src/
+│   │       ├── App.tsx            # Master Screen Switcher
+│   │       └── components/
+│   │           ├── Screen1_ActivateLicense.tsx
+│   │           ├── Screen2_ShopConfig.tsx
+│   │           ├── Screen3_CatalogManager.tsx
+│   │           ├── Screen4_ExpressPOS.tsx
+│   │           └── Screen5_SettlementModal.tsx
+│   ├── admin-ui/                  # 6-Screen Web Admin Control Panel (Platform Owner)
+│   │   └── src/
+│   │       ├── AdminApp.tsx       # Master Admin Navigation Hub
+│   │       └── components/
+│   │           ├── AdminScreen1_Dashboard.tsx
+│   │           ├── AdminScreen2_MerchantList.tsx
+│   │           ├── AdminScreen3_MerchantOrderLogs.tsx
+│   │           ├── AdminScreen4_RevenueReports.tsx
+│   │           ├── AdminScreen5_NotificationBlockLogs.tsx
+│   │           └── AdminScreen6_LicenseGenerator.tsx
 │   ├── database/                  # Complete DDLs & seed data
-│   │   ├── sqlite/schema.sql
-│   │   ├── postgres/schema.sql
-│   │   └── seed/seed.sql
-│   └── api/                       # Fastify delta sync & Razorpay verifier
+│   │   ├── sqlite/schema.sql      # Local encrypted SQLite schema
+│   │   ├── postgres/schema.sql    # Supabase PostgreSQL schema with admin & block logs
+│   │   └── seed/seed.sql          # Seed data (Tea Shop, Kirana, Wholesale)
+│   └── api/                       # Fastify sync, admin metrics & Razorpay verifier
 │       └── src/server.ts
 ```

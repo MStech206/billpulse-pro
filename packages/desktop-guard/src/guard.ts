@@ -1,35 +1,34 @@
 /**
- * BillPulse Pro — Hardcoded Desktop Guard & Monotonic Clock Anti-Tamper Engine
+ * BillPulse Pro — Standardized Desktop Guard & Post-Month 7th-to-11th Grace Engine
  *
- * Implements the core offline security policies:
+ * Implements:
  * 1. Monotonic high-water mark to detect OS clock rollbacks (>300s).
  * 2. Mandatory YYYYMM month prefix enforcement.
- * 3. 7-day post-month grace period for offline operation.
- * 4. Hard block on Day 8+ post-month if internet remains disconnected.
- * 5. Reconnection dues verification & Razorpay settlement gate.
+ * 3. Day 1–7 Post-Month: Soft green reminder (Allowed).
+ * 4. Day 7–11 Post-Month: Urgent orange warning ("Blocked after 11th" — Allowed).
+ * 5. Day 11+ Post-Month: Hard block (Creation blocked until Razorpay UPI payment).
+ * 6. Payment settlement verification: Unlocks immediately when dues == 0.
  */
 
-import type { MerchantProfile, GuardEvaluationResult } from '../../shared/src/types.js';
+import type {
+  MerchantProfile,
+  GuardEvaluationResult,
+  BillingPlan,
+} from '../../shared/src/types.js';
 
-export const MAX_GRACE_DAYS_POST_MONTH = 7;
+export const DAY_7_GRACE_DAYS = 7;
+export const DAY_11_BLOCK_DAYS = 11;
 export const SECONDS_PER_DAY = 86400;
 export const CLOCK_ROLLBACK_TOLERANCE_SECONDS = 300; // 5 minutes
 
-/**
- * Returns the Unix epoch timestamp (in seconds) for the final second of the given 'YYYY-MM'
- */
 export function getEndOfMonthUnix(yearMonth: string): number {
   const [yearStr, monthStr] = yearMonth.split('-');
   const year = parseInt(yearStr, 10);
-  const month = parseInt(monthStr, 10); // 1-12
-  // Date with day 0 of month+1 is the last day of month in UTC
+  const month = parseInt(monthStr, 10);
   const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   return Math.floor(endOfMonth.getTime() / 1000);
 }
 
-/**
- * Format a Unix timestamp (seconds) into 'YYYY-MM' string in UTC
- */
 export function formatUnixToYearMonth(unixSeconds: number): string {
   const d = new Date(unixSeconds * 1000);
   const year = d.getUTCFullYear();
@@ -37,9 +36,6 @@ export function formatUnixToYearMonth(unixSeconds: number): string {
   return `${year}-${month}`;
 }
 
-/**
- * Validates the current system clock against monotonic high-water mark
- */
 export function checkMonotonicClock(
   nowUnix: number,
   maxSeenTimestamp: number
@@ -54,21 +50,13 @@ export function checkMonotonicClock(
   return { isTampered: false };
 }
 
-/**
- * Updates the monotonic high-water mark timestamp safely
- */
 export function updateMonotonicTimestamp(currentMax: number, nowUnix: number): number {
   return Math.max(currentMax, nowUnix);
 }
 
-/**
- * Generates an invoice number complying with the mandatory YYYYMM format:
- * Format: {PREFIX}-{YYYYMM}-{TERMINAL}-{SEQ} (e.g. INV-202611-D1-0001)
- * or {PREFIX}-{YYYYMM}-{SEQ} if terminal code is omitted.
- */
 export function generateInvoiceNumber(
   prefix: string,
-  yearMonth: string, // '2026-11' or '202611'
+  yearMonth: string,
   sequenceNumber: number,
   terminalCode?: string
 ): string {
@@ -81,13 +69,7 @@ export function generateInvoiceNumber(
 }
 
 /**
- * Core Hardcoded Desktop Verification Algorithm
- * Evaluates whether new invoice creation is allowed based on:
- * - Anti-tamper clock check
- * - Active billing month status
- * - Days elapsed post-month-end
- * - Internet connectivity state
- * - Pending micro-billing dues
+ * Core Standardized Desktop Verification Algorithm
  */
 export function verifyDesktopGuard(
   profile: MerchantProfile,
@@ -104,59 +86,88 @@ export function verifyDesktopGuard(
     };
   }
 
+  // 2. Administrative Revocation Check
+  if (profile.license_status === 'REVOKED' || profile.license_status === 'SUSPENDED') {
+    return {
+      allowed: false,
+      code: 'BLOCKED_POST_MONTH_EXCEEDED',
+      message: 'License has been suspended or revoked by the platform administrator.',
+    };
+  }
+
   const currentYearMonth = formatUnixToYearMonth(nowUnix); // e.g. '2026-12'
   const isMonthExceeded = currentYearMonth > profile.active_year_month;
 
-  // 2. Compute days elapsed since the active billing month ended
+  // 3. Compute days elapsed since active billing month ended
   const activeMonthEndUnix = getEndOfMonthUnix(profile.active_year_month);
   const referenceTimestamp = Math.max(profile.last_synced_at, activeMonthEndUnix);
   const offlineDaysAfterMonthEnd = isMonthExceeded
     ? Math.floor(Math.max(0, nowUnix - referenceTimestamp) / SECONDS_PER_DAY)
     : 0;
 
-  // 3. Offline Evaluation: Allow up to 7 days after month-end; block on Day 8+
-  if (!isInternetConnected) {
-    if (isMonthExceeded && offlineDaysAfterMonthEnd > MAX_GRACE_DAYS_POST_MONTH) {
+  const duesINR = profile.pending_dues_paise / 100;
+
+  // 4. In-Month Operation: Normal billing
+  if (!isMonthExceeded) {
+    if (!isInternetConnected) {
       return {
-        allowed: false,
-        code: 'BLOCKED_OFFLINE_OVER_7_DAYS',
-        offlineDays: offlineDaysAfterMonthEnd,
-        pendingDuesINR: profile.pending_dues_paise / 100,
-        message: `Offline grace period exceeded (${offlineDaysAfterMonthEnd} days since month-end). Internet connection required to continue billing.`,
+        allowed: true,
+        code: 'OFFLINE_ALLOWED',
+        message: 'Normal offline billing active for the current calendar month.',
       };
     }
-
-    const remainingGraceDays = isMonthExceeded
-      ? Math.max(0, MAX_GRACE_DAYS_POST_MONTH - offlineDaysAfterMonthEnd)
-      : undefined;
-
     return {
       allowed: true,
-      code: 'OFFLINE_ALLOWED',
-      remainingGraceDays,
-      offlineDays: isMonthExceeded ? offlineDaysAfterMonthEnd : 0,
-      message: isMonthExceeded
-        ? `Post-month grace active: ${remainingGraceDays} day(s) remaining. Connect internet soon.`
-        : 'Billing permitted offline in current calendar month.',
+      code: 'UNLOCKED_AND_VERIFIED',
+      nextPrefix: `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`,
+      message: 'Online billing active and synchronized.',
     };
   }
 
-  // 4. Online Reconnection Evaluation: Check if pending payment is left for exceeded month
-  if (isMonthExceeded && profile.pending_dues_paise > 0) {
+  // 5. Post-Month Operation: 7th to 11th Policy
+  const daysUntilBlock = Math.max(0, DAY_11_BLOCK_DAYS - offlineDaysAfterMonthEnd);
+
+  // If already paid up:
+  if (profile.pending_dues_paise === 0) {
+    return {
+      allowed: true,
+      code: 'UNLOCKED_AND_VERIFIED',
+      nextPrefix: `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`,
+      message: 'Previous month settled. New month cycle fully unlocked.',
+    };
+  }
+
+  // PHASE A: Day 11+ -> HARD BLOCK (Offline or Online with unpaid balance)
+  if (offlineDaysAfterMonthEnd > DAY_11_BLOCK_DAYS) {
     return {
       allowed: false,
-      code: 'PAYMENT_DUE_ON_RECONNECT',
-      pendingDuesINR: profile.pending_dues_paise / 100,
-      message: `Pending dues of Rs. ${(profile.pending_dues_paise / 100).toFixed(2)} detected for closed billing month. Settle via Razorpay to unlock.`,
+      code: 'BLOCKED_POST_MONTH_EXCEEDED',
+      offlineDays: offlineDaysAfterMonthEnd,
+      daysUntilBlock: 0,
+      pendingDuesINR: duesINR,
+      message: `Your application is blocked. Past month dues of Rs. ${duesINR.toFixed(2)} must be paid via Razorpay to resume billing.`,
     };
   }
 
-  // 5. All Clear: Roll over active_year_month and unlock full desktop access
-  const nextPrefix = `${profile.invoice_prefix}-${currentYearMonth.replace('-', '')}-`;
+  // PHASE B: Day 7 to Day 11 -> URGENT ORANGE WARNING (Billing Allowed)
+  if (offlineDaysAfterMonthEnd > DAY_7_GRACE_DAYS) {
+    return {
+      allowed: true,
+      code: 'POST_MONTH_WARNING',
+      offlineDays: offlineDaysAfterMonthEnd,
+      daysUntilBlock,
+      pendingDuesINR: duesINR,
+      message: `Your application may be blocked after the 11th! ${daysUntilBlock} day(s) remaining. Pay Rs. ${duesINR.toFixed(2)} via UPI.`,
+    };
+  }
+
+  // PHASE C: Day 1 to Day 7 -> SOFT GREEN REMINDER (Billing Allowed)
   return {
     allowed: true,
-    code: 'UNLOCKED_AND_VERIFIED',
-    nextPrefix,
-    message: 'Billing verified and fully unlocked for the active cycle.',
+    code: 'POST_MONTH_REMINDER',
+    offlineDays: offlineDaysAfterMonthEnd,
+    daysUntilBlock,
+    pendingDuesINR: duesINR,
+    message: `Past month dues: Rs. ${duesINR.toFixed(2)}. Grace period active (${daysUntilBlock} days left).`,
   };
 }

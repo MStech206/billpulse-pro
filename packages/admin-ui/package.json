@@ -1,0 +1,14 @@
+{
+  "name": "@billpulse/admin-ui",
+  "version": "1.0.0",
+  "description": "6-Screen Web Admin Control Panel for Platform Owner (BillPulse Pro)",
+  "main": "./src/AdminApp.tsx",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@billpulse/shared": "*",
+    "@billpulse/api": "*"
+  }
+}
