@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BillPulse Pro — Interactive Clickable Skeleton (Desktop POS + Admin Panel)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .receipt-edge {
+      background-image: radial-gradient(circle at 6px 0, transparent 4px, #ffffff 4.5px);
+      background-size: 12px 8px;
+      background-repeat: repeat-x;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col select-none">
+
+  <!-- TOP MASTER APPLICATION SWITCHER -->
+  <div class="bg-black border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-50">
+    <div class="flex items-center space-x-3">
+      <span class="px-2 py-0.5 bg-emerald-600 text-white text-xs font-extrabold rounded">SKELETON PREVIEW</span>
+      <span class="text-sm font-bold text-slate-200">BillPulse Pro Interactive Prototype</span>
+    </div>
+
+    <div class="flex items-center space-x-2 bg-slate-900 p-1 rounded-lg border border-slate-800">
+      <button id="btn-mode-desktop" onclick="switchAppMode('DESKTOP')" class="px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white transition">
+        💻 Desktop POS App (5 Screens)
+      </button>
+      <button id="btn-mode-admin" onclick="switchAppMode('ADMIN')" class="px-4 py-1.5 rounded text-xs font-bold text-slate-400 hover:text-white transition">
+        🛡️ Web Admin Control Center (6 Screens)
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- APPLICATION 1: DESKTOP POS APP (5 SCREENS)                            -->
+  <!-- ===================================================================== -->
+  <div id="app-desktop" class="flex-1 flex flex-col">
+    <!-- Desktop Screen Tabs & Grace Testers -->
+    <nav class="bg-slate-900 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex items-center space-x-1.5">
+        <span class="text-slate-400 font-semibold mr-1">Screens:</span>
+        <button onclick="setDesktopScreen('ACTIVATION')" id="dtab-ACTIVATION" class="dtab px-3 py-1 rounded bg-slate-800 text-slate-300 hover:text-white">1. Activation</button>
+        <button onclick="setDesktopScreen('CONFIG')" id="dtab-CONFIG" class="dtab px-3 py-1 rounded bg-slate-800 text-slate-300 hover:text-white">2. Shop Setup</button>
+        <button onclick="setDesktopScreen('CATALOG')" id="dtab-CATALOG" class="dtab px-3 py-1 rounded bg-slate-800 text-slate-300 hover:text-white">3. Catalog (F6)</button>
+        <button onclick="setDesktopScreen('POS')" id="dtab-POS" class="dtab px-3 py-1 rounded bg-emerald-600 text-white font-bold">4. Express POS (F4)</button>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <span class="text-slate-400 text-[11px]">Simulate Grace Policy:</span>
+        <button onclick="openSettlementModal(4)" class="px-2.5 py-1 bg-emerald-950 text-emerald-300 border border-emerald-700 rounded text-[11px] hover:bg-emerald-900">Day 4 (Reminder)</button>
+        <button onclick="openSettlementModal(8)" class="px-2.5 py-1 bg-amber-950 text-amber-300 border border-amber-700 rounded text-[11px] hover:bg-amber-900">Day 8 (Warning)</button>
+        <button onclick="openSettlementModal(12)" class="px-2.5 py-1 bg-rose-950 text-rose-300 border border-rose-700 rounded text-[11px] hover:bg-rose-900">Day 12 (Hard Block)</button>
+      </div>
+    </nav>
+
+    <!-- Desktop Screen Container -->
+    <div id="desktop-viewport" class="flex-1 flex flex-col"></div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- APPLICATION 2: WEB ADMIN CONTROL CENTER (6 SCREENS)                   -->
+  <!-- ===================================================================== -->
+  <div id="app-admin" class="hidden flex-1 flex flex-col">
+    <nav class="bg-slate-900 border-b border-slate-800 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex items-center space-x-2">
+        <div class="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center font-bold text-white text-xs">BP</div>
+        <span class="font-bold text-slate-200">Platform Admin Control Center</span>
+      </div>
+      <div class="flex flex-wrap items-center space-x-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+        <button onclick="setAdminScreen('DASHBOARD')" id="atab-DASHBOARD" class="atab px-3 py-1.5 rounded bg-emerald-600 text-white font-semibold">Dashboard</button>
+        <button onclick="setAdminScreen('MERCHANTS')" id="atab-MERCHANTS" class="atab px-3 py-1.5 rounded text-slate-400 hover:text-white">Merchants</button>
+        <button onclick="setAdminScreen('ORDER_LOGS')" id="atab-ORDER_LOGS" class="atab px-3 py-1.5 rounded text-slate-400 hover:text-white">Order Logs</button>
+        <button onclick="setAdminScreen('REVENUE')" id="atab-REVENUE" class="atab px-3 py-1.5 rounded text-slate-400 hover:text-white">Revenue</button>
+        <button onclick="setAdminScreen('BLOCK_LOGS')" id="atab-BLOCK_LOGS" class="atab px-3 py-1.5 rounded text-slate-400 hover:text-white">Block Logs</button>
+        <button onclick="setAdminScreen('LICENSES')" id="atab-LICENSES" class="atab px-3 py-1.5 rounded text-slate-400 hover:text-white">Key Generator</button>
+      </div>
+    </nav>
+
+    <div id="admin-viewport" class="flex-1 max-w-7xl mx-auto w-full p-6"></div>
+  </div>
+
+  <!-- SETTLEMENT / BLOCK MODAL OVERLAY -->
+  <div id="settlement-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50"></div>
+
+  <script>
+    // =========================================================================
+    // STATE & BUSINESS PRESETS
+    // =========================================================================
+    const PRESETS = {
+      TEA_SHOP: {
+        name: 'Tea Shop / Chai Point',
+        shopName: 'Syed Tea Corner',
+        prefix: 'TEA',
+        tier: 'PER_ORDER_050',
+        items: [
+          { id: 't1', name: 'Special Milk Tea', rate: 15, gst: 5 },
+          { id: 't2', name: 'Filter Coffee', rate: 20, gst: 5 },
+          { id: 't3', name: 'Crispy Samosa', rate: 15, gst: 5 },
+          { id: 't4', name: 'Fresh Lime Soda', rate: 30, gst: 5 },
+          { id: 't5', name: 'Osmania Biscuit (2pc)', rate: 10, gst: 5 },
+          { id: 't6', name: 'Veg Sandwich', rate: 40, gst: 5 }
+        ]
+      },
+      KIRANA_STORE: {
+        name: 'Kirana & Grocery Store',
+        shopName: 'Apex Kirana Store',
+        prefix: 'KRN',
+        tier: 'PER_ORDER_050',
+        items: [
+          { id: 'k1', name: 'Basmati Rice (1kg)', rate: 120, gst: 5 },
+          { id: 'k2', name: 'Sunflower Oil (1L)', rate: 145, gst: 5 },
+          { id: 'k3', name: 'Refined Sugar (1kg)', rate: 44, gst: 5 },
+          { id: 'k4', name: 'Chakki Atta (5kg)', rate: 220, gst: 5 },
+          { id: 'k5', name: 'Toor Dal (1kg)', rate: 160, gst: 5 },
+          { id: 'k6', name: 'Toned Milk (500ml)', rate: 27, gst: 0 }
+        ]
+      },
+      WHOLESALE: {
+        name: 'Wholesaler / Mandi',
+        shopName: 'Metro Wholesale Mandi',
+        prefix: 'WHL',
+        tier: 'PER_INVOICE_100',
+        items: [
+          { id: 'w1', name: 'Basmati Rice Bag (25kg)', rate: 2750, gst: 5 },
+          { id: 'w2', name: 'Cooking Oil Tin (15kg)', rate: 2150, gst: 5 },
+          { id: 'w3', name: 'Sugar Sack (50kg)', rate: 2100, gst: 5 },
+          { id: 'w4', name: 'Wheat Flour Sack (50kg)', rate: 1950, gst: 5 }
+        ]
+      },
+      MEDICAL_STORE: {
+        name: 'Medical / Pharmacy',
+        shopName: 'City Care Pharmacy',
+        prefix: 'MED',
+        tier: 'PER_ORDER_050',
+        items: [
+          { id: 'm1', name: 'Paracetamol 650mg', rate: 32, gst: 12 },
+          { id: 'm2', name: 'Cough Syrup (100ml)', rate: 95, gst: 12 },
+          { id: 'm3', name: 'Vitamin C (15 tab)', rate: 45, gst: 12 },
+          { id: 'm4', name: 'Hand Sanitizer (100ml)', rate: 50, gst: 18 }
+        ]
+      }
+    };
+
+    const state = {
+      appMode: 'DESKTOP',
+      desktopScreen: 'POS',
+      adminScreen: 'DASHBOARD',
+      isOffline: false,
+      merchant: {
+        tenantId: 'tenant-tea-001',
+        businessType: 'TEA_SHOP',
+        shopName: 'Syed Tea Corner',
+        address: 'Shop #12, Market Ring Road, Bengaluru',
+        mobile: '9876543210',
+        gstin: '29AABCU9603R1ZM',
+        upiId: 'syedtea@upi',
+        prefix: 'TEA',
+        tier: 'PER_ORDER_050',
+        ordersMonth: 412,
+        duesINR: 226.00, // 20 base + 412 * 0.50
+        isHardBlocked: false
+      },
+      catalog: [...PRESETS.TEA_SHOP.items],
+      cart: [
+        { id: 't1', name: 'Special Milk Tea', rate: 15, gst: 5, qty: 2 },
+        { id: 't3', name: 'Crispy Samosa', rate: 15, gst: 5, qty: 1 }
+      ],
+      paymentMode: 'CASH',
+      adminMerchants: [
+        { id: 'tenant-tea-001', name: 'Syed Tea Corner', type: 'TEA_SHOP', mobile: '9876543210', serial: 'BP-2026-9842-1084', orders: 412, rate: 0.5, dues: 226, paid: false, status: 'WARNING' },
+        { id: 'tenant-krn-002', name: 'Apex Kirana Store', type: 'KIRANA_STORE', mobile: '9845012345', serial: 'BP-2026-4412-8890', orders: 280, rate: 0.5, dues: 160, paid: true, status: 'ACTIVE' },
+        { id: 'tenant-whl-003', name: 'Metro Wholesale Mandi', type: 'WHOLESALE', mobile: '9811099887', serial: 'BP-2026-1102-7744', orders: 180, rate: 1.0, dues: 1340, paid: false, status: 'BLOCKED' },
+        { id: 'tenant-med-004', name: 'City Care Pharmacy', type: 'MEDICAL_STORE', mobile: '9833019283', serial: 'BP-2026-3391-4402', orders: 350, rate: 0.5, dues: 195, paid: true, status: 'ACTIVE' }
+      ],
+      selectedAdminMerchantId: 'tenant-tea-001',
+      merchantFilter: 'ALL',
+      merchantSearch: '',
+      blockLogs: [
+        { time: '12 Nov 09:00', event: 'DAY_11_BLOCKED', shop: 'Metro Wholesale Mandi', mobile: '9811099887', dues: 1340, details: 'Auto-locked on Day 12 post-month. Payment pending.' },
+        { time: '08 Nov 10:15', event: 'DAY_7_WARNING', shop: 'Syed Tea Corner', mobile: '9876543210', dues: 226, details: 'Warning sent: Application may be blocked after 11th.' },
+        { time: '06 Nov 14:22', event: 'UNBLOCKED_PAYMENT', shop: 'Apex Kirana Store', mobile: '9845012345', dues: 160, details: 'Razorpay UPI payment captured (pay_Px819402941).' }
+      ],
+      licenseKeys: [
+        { serial: 'BP-2026-9842-1084', key: 'ACT-7841-B9X2-K991', shop: 'Syed Tea Corner', tier: '₹0.50/order', status: 'ACTIVE' },
+        { serial: 'BP-2026-4412-8890', key: 'ACT-3321-K892-P012', shop: 'Apex Kirana Store', tier: '₹0.50/order', status: 'ACTIVE' },
+        { serial: 'BP-2026-1102-7744', key: 'ACT-9901-L772-M441', shop: 'Metro Wholesale Mandi', tier: '₹1.00/invoice', status: 'ACTIVE' }
+      ]
+    };
+
+    // =========================================================================
+    // APP MODE & SCREEN SWITCHERS
+    // =========================================================================
+    function switchAppMode(mode) {
+      state.appMode = mode;
+      document.getElementById('app-desktop').classList.toggle('hidden', mode !== 'DESKTOP');
+      document.getElementById('app-admin').classList.toggle('hidden', mode !== 'ADMIN');
+
+      document.getElementById('btn-mode-desktop').className = mode === 'DESKTOP'
+        ? 'px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white transition'
+        : 'px-4 py-1.5 rounded text-xs font-bold text-slate-400 hover:text-white transition';
+      document.getElementById('btn-mode-admin').className = mode === 'ADMIN'
+        ? 'px-4 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white transition'
+        : 'px-4 py-1.5 rounded text-xs font-bold text-slate-400 hover:text-white transition';
+
+      if (mode === 'DESKTOP') renderDesktop();
+      else renderAdmin();
+    }
+
+    function setDesktopScreen(screen) {
+      state.desktopScreen = screen;
+      document.querySelectorAll('.dtab').forEach(b => {
+        b.className = 'dtab px-3 py-1 rounded bg-slate-800 text-slate-300 hover:text-white';
+      });
+      document.getElementById('dtab-' + screen).className = 'dtab px-3 py-1 rounded bg-emerald-600 text-white font-bold';
+      renderDesktop();
+    }
+
+    function setAdminScreen(screen) {
+      state.adminScreen = screen;
+      document.querySelectorAll('.atab').forEach(b => {
+        b.className = 'atab px-3 py-1.5 rounded text-slate-400 hover:text-white';
+      });
+      document.getElementById('atab-' + screen).className = 'atab px-3 py-1.5 rounded bg-emerald-600 text-white font-semibold';
+      renderAdmin();
+    }
+
+    // =========================================================================
+    // RENDER DESKTOP SCREENS (1 TO 5)
+    // =========================================================================
+    function renderDesktop() {
+      const vp = document.getElementById('desktop-viewport');
+      const m = state.merchant;
+
+      if (state.desktopScreen === 'ACTIVATION') {
+        vp.innerHTML = `
+          <div class="flex-1 flex items-center justify-center p-6">
+            <div class="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+              <div class="bg-emerald-600 px-6 py-3 font-bold text-white flex justify-between items-center">
+                <span>Screen 1: Activate Terminal License</span>
+                <span class="text-xs font-normal opacity-90">HWID: WIN-882194</span>
+              </div>
+              <div class="p-6 space-y-4">
+                <div>
+                  <label class="text-xs text-slate-400 uppercase font-semibold block mb-1">Serial Number</label>
+                  <input type="text" value="BP-2026-9842-1084" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-emerald-300 font-mono text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 uppercase font-semibold block mb-1">Activation Key</label>
+                  <input type="text" value="ACT-7841-B9X2-K991" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-emerald-300 font-mono text-sm">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 uppercase font-semibold block mb-1">Merchant Mobile</label>
+                  <input type="text" value="${m.mobile}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm">
+                </div>
+                <div class="bg-slate-950 p-3 rounded border border-slate-800 text-xs text-slate-400 flex justify-between">
+                  <span>Terminal Counter 1 (D1)</span>
+                  <span class="text-emerald-400 font-semibold">● Hardware Bind Ready</span>
+                </div>
+                <button onclick="setDesktopScreen('CONFIG')" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition">
+                  Activate &amp; Proceed to Shop Setup →
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.desktopScreen === 'CONFIG') {
+        vp.innerHTML = `
+          <div class="flex-1 max-w-4xl mx-auto w-full p-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5 shadow-xl">
+              <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h2 class="text-lg font-bold text-emerald-400">Screen 2: Shop Setup &amp; Business Presets</h2>
+                  <p class="text-xs text-slate-400">Select your business type to auto-configure items, GST slabs, and prefix.</p>
+                </div>
+                <span class="text-xs bg-slate-800 px-3 py-1 rounded text-emerald-300">Active Prefix: <b>${m.prefix}-202611-0001</b></span>
+              </div>
+
+              <div>
+                <label class="text-xs font-semibold text-slate-300 uppercase block mb-2">1. Select Business Type (Click to switch live preset)</label>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  ${Object.keys(PRESETS).map(key => {
+                    const active = m.businessType === key;
+                    return `
+                      <button onclick="selectPreset('${key}')" class="p-3 rounded-lg border text-left transition ${active ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/40' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-600'}">
+                        <div class="font-bold text-xs">${PRESETS[key].name}</div>
+                        <div class="text-[10px] opacity-80 font-mono mt-1">Prefix: ${PRESETS[key].prefix} | ${PRESETS[key].tier === 'PER_INVOICE_100' ? '₹1.00' : '₹0.50'}</div>
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-800">
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Shop Name</label>
+                  <input id="cfg-name" type="text" value="${m.shopName}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Owner Mobile</label>
+                  <input id="cfg-mobile" type="text" value="${m.mobile}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white">
+                </div>
+                <div class="md:col-span-2">
+                  <label class="text-xs text-slate-400 block mb-1">Address (Prints on Receipt)</label>
+                  <input id="cfg-addr" type="text" value="${m.address}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Merchant UPI ID (Customer QR)</label>
+                  <input id="cfg-upi" type="text" value="${m.upiId}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Invoice Prefix</label>
+                  <input id="cfg-prefix" type="text" value="${m.prefix}" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-emerald-400 font-mono font-bold">
+                </div>
+              </div>
+
+              <button onclick="saveShopConfig()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg transition">
+                Save Configuration &amp; Start Billing [F4] →
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.desktopScreen === 'CATALOG') {
+        vp.innerHTML = `
+          <div class="flex-1 max-w-5xl mx-auto w-full p-6 space-y-5">
+            <div class="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-xl">
+              <div>
+                <h2 class="text-lg font-bold text-emerald-400">Screen 3: Product Catalog (F6) — ${PRESETS[m.businessType].name}</h2>
+                <p class="text-xs text-slate-400">${state.catalog.length} items ready for 1-tap counter billing</p>
+              </div>
+              <button onclick="setDesktopScreen('POS')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">
+                Open POS Billing [F4] →
+              </button>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap gap-3 items-end">
+              <div class="flex-1 min-w-[180px]">
+                <label class="text-xs text-slate-400 block mb-1">New Item Name</label>
+                <input id="new-item-name" type="text" placeholder="e.g. Masala Chai" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-white">
+              </div>
+              <div class="w-28">
+                <label class="text-xs text-slate-400 block mb-1">Rate (₹)</label>
+                <input id="new-item-rate" type="number" placeholder="20" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-white">
+              </div>
+              <button onclick="addCatalogItem()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">
+                + Add Item
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              ${state.catalog.map(item => `
+                <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+                  <div class="flex justify-between items-start">
+                    <span class="font-semibold text-sm text-white">${item.name}</span>
+                    <button onclick="deleteCatalogItem('${item.id}')" class="text-slate-500 hover:text-rose-400 text-xs">✕</button>
+                  </div>
+                  <div class="mt-3 pt-2 border-t border-slate-800 flex justify-between items-center">
+                    <span class="text-base font-bold text-emerald-400">₹${item.rate.toFixed(2)}</span>
+                    <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">GST ${item.gst}%</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.desktopScreen === 'POS') {
+        const subtotal = state.cart.reduce((s, i) => s + i.rate * i.qty, 0);
+        const gst = subtotal * 0.05;
+        const grandTotal = subtotal + gst;
+        const invNum = `${m.prefix}-202611-${String(m.ordersMonth + 1).padStart(4, '0')}`;
+        const perOrderRate = m.tier === 'PER_INVOICE_100' ? 1.00 : 0.50;
+
+        vp.innerHTML = `
+          <!-- POS Top Sub-header -->
+          <div class="bg-slate-900/70 border-b border-slate-800 px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center space-x-3">
+              <span class="font-bold text-emerald-400 text-sm">${m.shopName}</span>
+              <span class="px-2 py-0.5 bg-slate-800 rounded text-slate-300">${PRESETS[m.businessType].name}</span>
+            </div>
+            <div class="flex items-center space-x-3">
+              <button onclick="toggleOffline()" class="px-2.5 py-1 rounded border flex items-center space-x-1.5 ${state.isOffline ? 'bg-amber-950 text-amber-300 border-amber-700' : 'bg-emerald-950 text-emerald-300 border-emerald-700'}">
+                <span class="w-2 h-2 rounded-full ${state.isOffline ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
+                <span>${state.isOffline ? 'Offline Mode (SQLite Local)' : 'Online (Synced)'}</span>
+              </button>
+              <button onclick="openSettlementModal(8)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700">
+                Month Dues: <b class="text-emerald-400">₹${m.duesINR.toFixed(2)}</b> (${m.ordersMonth} orders)
+              </button>
+            </div>
+          </div>
+
+          ${m.isHardBlocked ? `
+            <div class="bg-rose-600 text-white px-6 py-2.5 text-xs font-bold flex justify-between items-center">
+              <span>🚫 APPLICATION BLOCKED (Day 11+ Exceeded) — New orders disabled until month-end dues are paid.</span>
+              <button onclick="openSettlementModal(12)" class="px-3 py-1 bg-white text-rose-700 rounded font-bold">Pay ₹${m.duesINR.toFixed(2)} via UPI Now</button>
+            </div>
+          ` : ''}
+
+          <!-- Split Screen POS -->
+          <div class="flex-1 grid grid-cols-1 lg:grid-cols-12">
+            <!-- Left Side: Quick Items & Cart -->
+            <div class="lg:col-span-7 p-5 flex flex-col justify-between border-r border-slate-800 space-y-4">
+              <div class="space-y-4">
+                <div>
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Tap to Add Quick Items</span>
+                    <button onclick="setDesktopScreen('CATALOG')" class="text-xs text-emerald-400 hover:underline">Edit Catalog [F6] →</button>
+                  </div>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    ${state.catalog.map(item => `
+                      <button onclick="addToCart('${item.id}')" class="p-3 bg-slate-900 hover:bg-slate-800 active:scale-95 border border-slate-800 hover:border-emerald-500/60 rounded-lg text-left transition">
+                        <div class="text-xs font-semibold text-white truncate">${item.name}</div>
+                        <div class="text-xs font-bold text-emerald-400 mt-1">₹${item.rate.toFixed(2)}</div>
+                      </button>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div>
+                  <div class="text-xs font-bold text-slate-400 uppercase mb-2">Current Order (${invNum})</div>
+                  <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+                    <table class="w-full text-xs text-left">
+                      <thead class="bg-slate-800 text-slate-400">
+                        <tr>
+                          <th class="py-2 px-3">Item</th>
+                          <th class="py-2 px-2 text-center">Qty</th>
+                          <th class="py-2 px-3 text-right">Rate</th>
+                          <th class="py-2 px-3 text-right">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-800">
+                        ${state.cart.length === 0 ? `<tr><td colspan="4" class="text-center py-6 text-slate-500">Tap any item above to begin billing</td></tr>` :
+                          state.cart.map(line => `
+                            <tr>
+                              <td class="py-2.5 px-3 font-medium text-white">${line.name}</td>
+                              <td class="py-2.5 px-2 text-center">
+                                <div class="inline-flex items-center space-x-2 bg-slate-800 px-2 py-0.5 rounded">
+                                  <button onclick="updateCartQty('${line.id}', -1)" class="font-bold text-slate-300 hover:text-white">-</button>
+                                  <span class="font-bold text-emerald-400">${line.qty}</span>
+                                  <button onclick="updateCartQty('${line.id}', 1)" class="font-bold text-slate-300 hover:text-white">+</button>
+                                </div>
+                              </td>
+                              <td class="py-2.5 px-3 text-right text-slate-400">₹${line.rate.toFixed(2)}</td>
+                              <td class="py-2.5 px-3 text-right font-bold text-white">₹${(line.rate * line.qty).toFixed(2)}</td>
+                            </tr>
+                          `).join('')
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-800 space-y-3">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400 font-semibold uppercase">Payment Mode</span>
+                  <div class="flex space-x-2">
+                    ${['CASH', 'UPI', 'CARD', 'CREDIT'].map(mode => `
+                      <button onclick="state.paymentMode='${mode}'; renderDesktop()" class="px-3 py-1 rounded font-semibold ${state.paymentMode === mode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}">${mode}</button>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div class="flex space-x-3">
+                  <button onclick="state.cart=[]; renderDesktop()" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg">Clear [Esc]</button>
+                  <button onclick="punchOrder()" ${state.cart.length === 0 || m.isHardBlocked ? 'disabled' : ''} class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold rounded-lg shadow-lg text-sm transition">
+                    ${m.isHardBlocked ? '🚫 Billing Locked (Settle Dues)' : `Print &amp; Cash Out [F10] — ₹${grandTotal.toFixed(2)}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Side: Live 58mm Thermal Receipt Preview -->
+            <div class="lg:col-span-5 bg-slate-900/50 p-6 flex flex-col items-center justify-center">
+              <div class="w-full max-w-xs bg-white text-slate-900 p-5 rounded shadow-2xl font-mono text-xs">
+                <div class="text-center pb-3 border-b border-dashed border-slate-400">
+                  <div class="font-bold text-sm uppercase">${m.shopName}</div>
+                  <div class="text-[10px] text-slate-600 mt-0.5">${m.address}</div>
+                  <div class="text-[10px] text-slate-600">Ph: ${m.mobile}</div>
+                </div>
+                <div class="py-2 text-[10px] text-slate-600 border-b border-dashed border-slate-400 flex justify-between">
+                  <span>${invNum}</span>
+                  <span>12 Nov 2026</span>
+                </div>
+                <div class="py-2.5 border-b border-dashed border-slate-400 space-y-1">
+                  ${state.cart.length === 0 ? '<div class="text-center text-slate-400 italic py-2">Empty cart</div>' :
+                    state.cart.map(l => `
+                      <div class="flex justify-between">
+                        <span>${l.name} x${l.qty}</span>
+                        <span class="font-bold">₹${(l.rate * l.qty).toFixed(2)}</span>
+                      </div>
+                    `).join('')
+                  }
+                </div>
+                <div class="py-2 text-[11px] space-y-1 border-b border-dashed border-slate-400">
+                  <div class="flex justify-between text-slate-600"><span>Subtotal</span><span>₹${subtotal.toFixed(2)}</span></div>
+                  <div class="flex justify-between text-slate-600"><span>GST (5%)</span><span>₹${gst.toFixed(2)}</span></div>
+                  <div class="flex justify-between text-sm font-bold pt-1"><span>GRAND TOTAL</span><span>₹${grandTotal.toFixed(2)}</span></div>
+                </div>
+                <div class="pt-3 text-center text-[10px] text-slate-600">
+                  <div>Paid via <b>${state.paymentMode}</b></div>
+                  <div class="my-2 p-1.5 bg-slate-100 border border-slate-300 rounded inline-block">
+                    <div class="w-16 h-16 bg-slate-900 text-white flex items-center justify-center text-[8px]">[UPI QR]</div>
+                  </div>
+                  <div class="text-[9px] text-slate-500">${m.upiId}</div>
+                  <div class="mt-1 font-bold">Thank you! Visit again.</div>
+                </div>
+              </div>
+              <div class="mt-3 text-xs text-slate-400">
+                Platform Fee Accrued on Print: <b class="text-emerald-400">₹${perOrderRate.toFixed(2)}</b> (Month-End Postpaid)
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Desktop Actions
+    function selectPreset(key) {
+      const p = PRESETS[key];
+      state.merchant.businessType = key;
+      state.merchant.shopName = p.shopName;
+      state.merchant.prefix = p.prefix;
+      state.merchant.tier = p.tier;
+      state.catalog = [...p.items];
+      state.cart = [];
+      renderDesktop();
+    }
+
+    function saveShopConfig() {
+      state.merchant.shopName = document.getElementById('cfg-name').value || state.merchant.shopName;
+      state.merchant.mobile = document.getElementById('cfg-mobile').value || state.merchant.mobile;
+      state.merchant.address = document.getElementById('cfg-addr').value || state.merchant.address;
+      state.merchant.upiId = document.getElementById('cfg-upi').value || state.merchant.upiId;
+      state.merchant.prefix = (document.getElementById('cfg-prefix').value || state.merchant.prefix).toUpperCase();
+      setDesktopScreen('POS');
+    }
+
+    function addCatalogItem() {
+      const name = document.getElementById('new-item-name').value.trim();
+      const rate = parseFloat(document.getElementById('new-item-rate').value);
+      if (!name || isNaN(rate)) return;
+      state.catalog.push({ id: 'c-' + Date.now(), name, rate, gst: 5 });
+      renderDesktop();
+    }
+
+    function deleteCatalogItem(id) {
+      state.catalog = state.catalog.filter(i => i.id !== id);
+      renderDesktop();
+    }
+
+    function toggleOffline() {
+      state.isOffline = !state.isOffline;
+      renderDesktop();
+    }
+
+    function addToCart(id) {
+      const item = state.catalog.find(i => i.id === id);
+      if (!item) return;
+      const existing = state.cart.find(c => c.id === id);
+      if (existing) existing.qty += 1;
+      else state.cart.push({ ...item, qty: 1 });
+      renderDesktop();
+    }
+
+    function updateCartQty(id, delta) {
+      state.cart = state.cart.map(c => c.id === id ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0);
+      renderDesktop();
+    }
+
+    function punchOrder() {
+      if (state.cart.length === 0 || state.merchant.isHardBlocked) return;
+      const fee = state.merchant.tier === 'PER_INVOICE_100' ? 1.0 : 0.5;
+      state.merchant.ordersMonth += 1;
+      state.merchant.duesINR += fee;
+      // Sync to Admin merchant record too!
+      const am = state.adminMerchants.find(x => x.id === state.merchant.tenantId);
+      if (am) {
+        am.orders += 1;
+        am.dues += fee;
+        am.paid = false;
+      }
+      state.cart = [];
+      renderDesktop();
+    }
+
+    // =========================================================================
+    // SETTLEMENT & 7TH-TO-11TH BLOCK MODAL
+    // =========================================================================
+    function openSettlementModal(day) {
+      const m = state.merchant;
+      const modal = document.getElementById('settlement-modal');
+      modal.classList.remove('hidden');
+
+      const isBlocked = day > 11 && m.duesINR > 0;
+      const isWarning = day > 7 && day <= 11 && m.duesINR > 0;
+      const daysLeft = Math.max(0, 11 - day);
+
+      if (isBlocked) state.merchant.isHardBlocked = true;
+
+      const bannerBg = isBlocked ? 'bg-rose-600' : isWarning ? 'bg-amber-600' : 'bg-emerald-600';
+      const bannerText = isBlocked
+        ? '🚫 APPLICATION BLOCKED (Day 11+ Exceeded)'
+        : isWarning
+        ? `⚠️ URGENT: Application May Be Blocked After the 11th (${daysLeft} days left)`
+        : `🔔 Grace Reminder: Day ${day} of Month (${daysLeft} days until block)`;
+
+      const orderFees = Math.max(0, m.duesINR - 20);
+
+      modal.innerHTML = `
+        <div class="w-full max-w-md bg-slate-900 border ${isBlocked ? 'border-rose-500' : isWarning ? 'border-amber-500' : 'border-slate-700'} rounded-xl overflow-hidden shadow-2xl">
+          <div class="${bannerBg} px-5 py-3.5 font-bold text-white text-xs flex justify-between items-center">
+            <span>${bannerText}</span>
+          </div>
+          <div class="p-6 space-y-4">
+            <p class="text-xs text-slate-300 leading-relaxed">
+              ${isBlocked
+                ? 'Your post-month grace period exceeded 11 days without payment. New billing is disabled until you settle via Razorpay UPI.'
+                : isWarning
+                ? 'Please settle your month-end dues before the 11th to avoid automatic application lockout.'
+                : 'Your monthly usage statement is ready. Billing continues normally during your grace period.'}
+            </p>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs space-y-2">
+              <div class="flex justify-between text-slate-400"><span>Fixed Monthly Base Fee</span><span>₹20.00</span></div>
+              <div class="flex justify-between text-slate-400"><span>Orders (${m.ordersMonth} bills)</span><span>₹${orderFees.toFixed(2)}</span></div>
+              <div class="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm text-emerald-400">
+                <span>TOTAL DUE</span><span>₹${m.duesINR.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div class="bg-white text-slate-900 rounded-lg p-4 text-center">
+              <div class="w-32 h-32 bg-slate-900 text-white mx-auto flex flex-col items-center justify-center rounded text-[10px] font-mono">
+                <span class="text-emerald-400 font-bold">RAZORPAY</span>
+                <span>[DYNAMIC UPI QR]</span>
+                <span>₹${m.duesINR.toFixed(2)}</span>
+              </div>
+              <div class="text-xs font-bold mt-2">Scan with GPay / PhonePe / Paytm</div>
+            </div>
+
+            <button onclick="simulateRazorpayPaid()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow-lg">
+              Simulate Razorpay Payment Captured (Instant Unlock)
+            </button>
+
+            ${!isBlocked ? `<button onclick="closeSettlementModal()" class="w-full py-1.5 text-xs text-slate-400 hover:text-white">Remind me later</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function simulateRazorpayPaid() {
+      state.merchant.duesINR = 0;
+      state.merchant.isHardBlocked = false;
+      const am = state.adminMerchants.find(x => x.id === state.merchant.tenantId);
+      if (am) { am.paid = true; am.status = 'ACTIVE'; }
+      state.blockLogs.unshift({
+        time: 'Just Now',
+        event: 'UNBLOCKED_PAYMENT',
+        shop: state.merchant.shopName,
+        mobile: state.merchant.mobile,
+        dues: 0,
+        details: 'Razorpay UPI payment confirmed via webhook. Counter unlocked.'
+      });
+      closeSettlementModal();
+      renderDesktop();
+    }
+
+    function closeSettlementModal() {
+      document.getElementById('settlement-modal').classList.add('hidden');
+      renderDesktop();
+    }
+
+    // =========================================================================
+    // RENDER ADMIN SCREENS (1 TO 6)
+    // =========================================================================
+    function renderAdmin() {
+      const vp = document.getElementById('admin-viewport');
+
+      const totalOrders = state.adminMerchants.reduce((s, m) => s + m.orders, 0);
+      const totalExpected = state.adminMerchants.reduce((s, m) => s + m.dues, 0);
+      const unpaidCount = state.adminMerchants.filter(m => !m.paid).length;
+      const warningCount = state.adminMerchants.filter(m => m.status === 'WARNING').length;
+      const blockedCount = state.adminMerchants.filter(m => m.status === 'BLOCKED' || m.status === 'SUSPENDED').length;
+
+      if (state.adminScreen === 'DASHBOARD') {
+        vp.innerHTML = `
+          <div class="space-y-6">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h2 class="text-lg font-bold text-white">Admin Screen 1: Global Platform Dashboard</h2>
+                <p class="text-xs text-slate-400">Live overview across all connected merchant counters</p>
+              </div>
+              <div class="flex space-x-2">
+                <button onclick="state.merchantFilter='UNPAID'; setAdminScreen('MERCHANTS')" class="px-3 py-1.5 bg-amber-600/20 text-amber-300 border border-amber-600/40 rounded-lg text-xs font-semibold">
+                  Review ${unpaidCount} Unpaid Shops
+                </button>
+                <button onclick="setAdminScreen('LICENSES')" class="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold">
+                  + Generate Key
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                <div class="text-xs text-slate-400">Total Merchants</div>
+                <div class="text-2xl font-bold text-white mt-1">${state.adminMerchants.length}</div>
+                <div class="text-[11px] text-emerald-400 mt-1">● Live Synchronized</div>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                <div class="text-xs text-slate-400">Total Orders (This Mo)</div>
+                <div class="text-2xl font-bold text-white mt-1">${totalOrders.toLocaleString()}</div>
+                <div class="text-[11px] text-slate-400 mt-1">Metered at ₹0.50 / ₹1.00</div>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                <div class="text-xs text-slate-400">Expected Revenue</div>
+                <div class="text-2xl font-bold text-emerald-400 mt-1">₹${totalExpected.toFixed(2)}</div>
+                <div class="text-[11px] text-slate-400 mt-1">₹20 base + per-order fees</div>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                <div class="text-xs text-slate-400">Warning / Blocked</div>
+                <div class="text-2xl font-bold text-amber-400 mt-1">${warningCount + blockedCount} Shops</div>
+                <div class="text-[11px] text-slate-400 mt-1">${warningCount} Warning • ${blockedCount} Blocked</div>
+              </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <div class="px-5 py-3 border-b border-slate-800 flex justify-between items-center">
+                <span class="text-sm font-bold">Recent Shop Activity</span>
+                <button onclick="setAdminScreen('MERCHANTS')" class="text-xs text-emerald-400 hover:underline">View All →</button>
+              </div>
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400">
+                  <tr><th class="py-2.5 px-5">Shop Name</th><th class="py-2.5 px-4">Type</th><th class="py-2.5 px-4 text-center">Orders</th><th class="py-2.5 px-4 text-right">Dues</th><th class="py-2.5 px-5 text-center">Status</th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${state.adminMerchants.map(m => `
+                    <tr class="hover:bg-slate-800/40">
+                      <td class="py-3 px-5 font-bold">${m.name}</td>
+                      <td class="py-3 px-4 text-slate-400">${m.type}</td>
+                      <td class="py-3 px-4 text-center font-bold">${m.orders}</td>
+                      <td class="py-3 px-4 text-right font-bold text-emerald-400">₹${m.dues.toFixed(2)}</td>
+                      <td class="py-3 px-5 text-center">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${m.status === 'ACTIVE' ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : m.status === 'WARNING' ? 'bg-amber-950 text-amber-300 border border-amber-700' : 'bg-rose-950 text-rose-300 border border-rose-700'}">${m.status}</span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.adminScreen === 'MERCHANTS') {
+        const list = state.adminMerchants.filter(m => {
+          const matchSearch = m.name.toLowerCase().includes(state.merchantSearch.toLowerCase()) || m.mobile.includes(state.merchantSearch);
+          if (!matchSearch) return false;
+          if (state.merchantFilter === 'UNPAID') return !m.paid;
+          if (state.merchantFilter === 'WARNING') return m.status === 'WARNING';
+          if (state.merchantFilter === 'BLOCKED') return m.status === 'BLOCKED' || m.status === 'SUSPENDED';
+          if (state.merchantFilter === 'ACTIVE') return m.status === 'ACTIVE';
+          return true;
+        });
+
+        vp.innerHTML = `
+          <div class="space-y-4">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+              <h2 class="text-lg font-bold">Admin Screen 2: Merchant Registry (Grant / Suspend / Revoke)</h2>
+              <div class="flex flex-wrap gap-3 items-center">
+                <input type="text" value="${state.merchantSearch}" oninput="state.merchantSearch=this.value; renderAdmin()" placeholder="Search shop or mobile..." class="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-white">
+                <div class="flex space-x-1.5">
+                  ${['ALL', 'UNPAID', 'WARNING', 'BLOCKED', 'ACTIVE'].map(f => `
+                    <button onclick="state.merchantFilter='${f}'; renderAdmin()" class="px-3 py-1.5 rounded text-xs font-semibold ${state.merchantFilter === f ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}">${f}</button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400">
+                  <tr><th class="py-3 px-4">Shop &amp; Mobile</th><th class="py-3 px-3">Serial</th><th class="py-3 px-3 text-center">Orders</th><th class="py-3 px-3 text-right">Dues</th><th class="py-3 px-3 text-center">Status</th><th class="py-3 px-4 text-center">Actions</th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${list.map(m => `
+                    <tr class="hover:bg-slate-800/40">
+                      <td class="py-3 px-4"><b>${m.name}</b><div class="text-[10px] text-slate-400 font-mono">${m.mobile}</div></td>
+                      <td class="py-3 px-3 font-mono text-slate-300">${m.serial}</td>
+                      <td class="py-3 px-3 text-center font-bold">${m.orders}</td>
+                      <td class="py-3 px-3 text-right font-bold text-emerald-400">₹${m.dues.toFixed(2)} <div class="text-[10px] text-slate-500">${m.paid ? 'Paid' : 'Unpaid'}</div></td>
+                      <td class="py-3 px-3 text-center">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${m.status === 'ACTIVE' ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : m.status === 'WARNING' ? 'bg-amber-950 text-amber-300 border border-amber-700' : 'bg-rose-950 text-rose-300 border border-rose-700'}">${m.status}</span>
+                      </td>
+                      <td class="py-3 px-4 text-center space-x-1">
+                        <button onclick="state.selectedAdminMerchantId='${m.id}'; setAdminScreen('ORDER_LOGS')" class="px-2 py-1 bg-slate-800 rounded text-[11px]">Logs</button>
+                        ${m.status === 'BLOCKED' || m.status === 'SUSPENDED'
+                          ? `<button onclick="adminSetStatus('${m.id}', 'ACTIVE')" class="px-2 py-1 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 rounded text-[11px] font-bold">Unlock</button>`
+                          : `<button onclick="adminSetStatus('${m.id}', 'SUSPENDED')" class="px-2 py-1 bg-rose-600/30 text-rose-300 border border-rose-500/50 rounded text-[11px] font-bold">Suspend</button>`
+                        }
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.adminScreen === 'ORDER_LOGS') {
+        const m = state.adminMerchants.find(x => x.id === state.selectedAdminMerchantId) || state.adminMerchants[0];
+        vp.innerHTML = `
+          <div class="space-y-5">
+            <div class="flex justify-between items-center">
+              <button onclick="setAdminScreen('MERCHANTS')" class="text-xs text-emerald-400 font-bold">← Back to Merchants</button>
+              <span class="text-xs text-slate-400">Admin Screen 3: Merchant Order Logs</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl flex flex-wrap justify-between items-center gap-4">
+              <div>
+                <h2 class="text-lg font-bold">${m.name}</h2>
+                <p class="text-xs text-slate-400">Serial: ${m.serial} | Mobile: ${m.mobile}</p>
+              </div>
+              <div class="bg-slate-950 p-3 rounded border border-slate-800 font-mono text-xs">
+                Base: ₹20.00 + (${m.orders} orders × ₹${m.rate.toFixed(2)}) = <b class="text-emerald-400">₹${m.dues.toFixed(2)}</b>
+              </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400">
+                  <tr><th class="py-3 px-4">Invoice #</th><th class="py-3 px-4">Items Summary</th><th class="py-3 px-3">Mode</th><th class="py-3 px-4 text-right">Bill Total</th><th class="py-3 px-4 text-right">Platform Fee</th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  <tr><td class="py-3 px-4 font-mono font-bold">TEA-202611-0042</td><td class="py-3 px-4">Special Milk Tea x2, Crispy Samosa x1</td><td class="py-3 px-3">CASH</td><td class="py-3 px-4 text-right font-bold">₹47.25</td><td class="py-3 px-4 text-right text-emerald-400 font-bold">₹${m.rate.toFixed(2)}</td></tr>
+                  <tr><td class="py-3 px-4 font-mono font-bold">TEA-202611-0041</td><td class="py-3 px-4">Filter Coffee x2, Veg Sandwich x1</td><td class="py-3 px-3">UPI</td><td class="py-3 px-4 text-right font-bold">₹84.00</td><td class="py-3 px-4 text-right text-emerald-400 font-bold">₹${m.rate.toFixed(2)}</td></tr>
+                  <tr><td class="py-3 px-4 font-mono font-bold">TEA-202611-0040</td><td class="py-3 px-4">Special Milk Tea x4, Biscuit x4</td><td class="py-3 px-3">CASH</td><td class="py-3 px-4 text-right font-bold">₹105.00</td><td class="py-3 px-4 text-right text-emerald-400 font-bold">₹${m.rate.toFixed(2)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.adminScreen === 'REVENUE') {
+        vp.innerHTML = `
+          <div class="space-y-5">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl flex justify-between items-center">
+              <div>
+                <h2 class="text-lg font-bold">Admin Screen 4: Revenue &amp; Razorpay Reports</h2>
+                <p class="text-xs text-slate-400">Audited ₹20 base fees + per-order settlements</p>
+              </div>
+              <button onclick="alert('Exported revenue CSV!')" class="px-3 py-1.5 bg-slate-800 text-emerald-400 border border-emerald-500/30 rounded text-xs font-bold">Export CSV</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl"><div class="text-xs text-slate-400">Base Fees (₹20/shop)</div><div class="text-xl font-bold mt-1">₹${(state.adminMerchants.length * 20).toFixed(2)}</div></div>
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl"><div class="text-xs text-slate-400">Order Metering Fees</div><div class="text-xl font-bold text-emerald-400 mt-1">₹${(totalExpected - state.adminMerchants.length * 20).toFixed(2)}</div></div>
+              <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl"><div class="text-xs text-slate-400">Total Expected Revenue</div><div class="text-xl font-bold text-emerald-400 mt-1">₹${totalExpected.toFixed(2)}</div></div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400"><tr><th class="py-3 px-4">Razorpay Payment ID</th><th class="py-3 px-4">Merchant</th><th class="py-3 px-4">Method</th><th class="py-3 px-4 text-right">Amount</th><th class="py-3 px-4 text-center">Status</th></tr></thead>
+                <tbody class="divide-y divide-slate-800">
+                  <tr><td class="py-3 px-4 font-mono text-emerald-400">pay_Px819402941</td><td class="py-3 px-4 font-bold">Apex Kirana Store</td><td class="py-3 px-4">Razorpay UPI (PhonePe)</td><td class="py-3 px-4 text-right font-bold text-emerald-400">₹160.00</td><td class="py-3 px-4 text-center"><span class="px-2 py-0.5 bg-emerald-950 text-emerald-300 rounded-full text-[10px]">CAPTURED</span></td></tr>
+                  <tr><td class="py-3 px-4 font-mono text-emerald-400">pay_Px772819031</td><td class="py-3 px-4 font-bold">City Care Pharmacy</td><td class="py-3 px-4">Razorpay UPI (GPay)</td><td class="py-3 px-4 text-right font-bold text-emerald-400">₹195.00</td><td class="py-3 px-4 text-center"><span class="px-2 py-0.5 bg-emerald-950 text-emerald-300 rounded-full text-[10px]">CAPTURED</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.adminScreen === 'BLOCK_LOGS') {
+        vp.innerHTML = `
+          <div class="space-y-4">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+              <h2 class="text-lg font-bold">Admin Screen 5: 7th Warning &amp; 11th Block Audit Logs</h2>
+              <p class="text-xs text-slate-400">Every warning notification, Day 11 block, and Razorpay unlock event</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400"><tr><th class="py-3 px-4">Time</th><th class="py-3 px-4">Event</th><th class="py-3 px-4">Shop</th><th class="py-3 px-4 text-right">Dues</th><th class="py-3 px-4">Details</th></tr></thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${state.blockLogs.map(l => `
+                    <tr>
+                      <td class="py-3 px-4 font-mono text-slate-400">${l.time}</td>
+                      <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${l.event.includes('BLOCKED') || l.event.includes('REVOKED') ? 'bg-rose-950 text-rose-300' : l.event.includes('WARNING') ? 'bg-amber-950 text-amber-300' : 'bg-emerald-950 text-emerald-300'}">${l.event}</span></td>
+                      <td class="py-3 px-4 font-bold">${l.shop}</td>
+                      <td class="py-3 px-4 text-right font-mono text-emerald-400">₹${l.dues.toFixed(2)}</td>
+                      <td class="py-3 px-4 text-slate-300">${l.details}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (state.adminScreen === 'LICENSES') {
+        vp.innerHTML = `
+          <div class="space-y-5">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4">
+              <h2 class="text-lg font-bold">Admin Screen 6: License Key &amp; Serial Generator</h2>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Shop Name</label>
+                  <input id="gen-shop" type="text" placeholder="e.g. Balaji Tea Stall" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Billing Tier</label>
+                  <select id="gen-tier" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white">
+                    <option value="₹0.50/order">₹0.50 / order (Thermal + ₹20 base)</option>
+                    <option value="₹1.00/invoice">₹1.00 / invoice (A4 GST + ₹20 base)</option>
+                  </select>
+                </div>
+                <button onclick="generateNewKey()" class="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-xs">Generate Key Credentials</button>
+              </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-950 text-slate-400"><tr><th class="py-3 px-4">Serial Number</th><th class="py-3 px-4">Activation Key</th><th class="py-3 px-4">Assigned Shop</th><th class="py-3 px-4">Tier</th><th class="py-3 px-4 text-center">Status</th></tr></thead>
+                <tbody class="divide-y divide-slate-800 font-mono">
+                  ${state.licenseKeys.map(k => `
+                    <tr>
+                      <td class="py-3 px-4 text-emerald-400 font-bold">${k.serial}</td>
+                      <td class="py-3 px-4 text-slate-300">${k.key}</td>
+                      <td class="py-3 px-4 font-sans font-semibold">${k.shop}</td>
+                      <td class="py-3 px-4 font-sans text-slate-400">${k.tier}</td>
+                      <td class="py-3 px-4 text-center font-sans"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${k.status === 'ACTIVE' ? 'bg-emerald-950 text-emerald-300' : 'bg-blue-950 text-blue-300'}">${k.status}</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function adminSetStatus(id, newStatus) {
+      const m = state.adminMerchants.find(x => x.id === id);
+      if (!m) return;
+      m.status = newStatus;
+      if (newStatus === 'ACTIVE') m.paid = true;
+      state.blockLogs.unshift({
+        time: 'Just Now',
+        event: newStatus === 'ACTIVE' ? 'ADMIN_GRANTED' : 'ADMIN_REVOKED',
+        shop: m.name,
+        mobile: m.mobile,
+        dues: m.dues,
+        details: `Platform admin changed license state to ${newStatus}.`
+      });
+      renderAdmin();
+    }
+
+    function generateNewKey() {
+      const shop = document.getElementById('gen-shop').value.trim() || 'New Merchant Shop';
+      const tier = document.getElementById('gen-tier').value;
+      const r4 = () => Math.floor(1000 + Math.random() * 9000);
+      state.licenseKeys.unshift({
+        serial: `BP-2026-${r4()}-${r4()}`,
+        key: `ACT-${r4()}-${r4()}-${r4()}`,
+        shop,
+        tier,
+        status: 'UNUSED'
+      });
+      renderAdmin();
+    }
+
+    // Initialize
+    renderDesktop();
+  </script>
+</body>
+</html>
